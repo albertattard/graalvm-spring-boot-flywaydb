@@ -1,0 +1,37 @@
+[
+  {
+    "name": "org.flywaydb.core.internal.publishing.PublishingConfigurationExtension",
+    "queryAllDeclaredMethods": true,
+    "allDeclaredFields": true,
+    "queryAllDeclaredConstructors": true,
+    "methods": [
+      {
+        "name": "<init>",
+        "parameterTypes": [
+        ]
+      },
+      {
+        "name": "isCheckDriftOnMigrate",
+        "parameterTypes": [
+        ]
+      },
+      {
+        "name": "isPublishResult",
+        "parameterTypes": [
+        ]
+      },
+      {
+        "name": "setCheckDriftOnMigrate",
+        "parameterTypes": [
+          "boolean"
+        ]
+      },
+      {
+        "name": "setPublishResult",
+        "parameterTypes": [
+          "boolean"
+        ]
+      }
+    ]
+  }
+]

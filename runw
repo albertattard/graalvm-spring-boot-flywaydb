@@ -1,0 +1,38 @@
+#!/bin/bash
+
+set -e
+
+# Get the IP address of the OCI instance where the code will be synced and
+# command executed
+IP_ADDRESS=$(terraform -chdir='../../infrastructure/oci/terraform' output -json | jq --raw-output '.instance_public_ip.value')
+
+# The place where the code is placed
+WORKSPACE='/home/opc/workspace'
+
+# Sync the files from the parent directory before executing any commands. We
+# need the files from the parent directory as there are the parent POM and the
+# Maven wrapper.
+rsync \
+  --rsh 'ssh -i ~/.ssh/ssh-key-oci-instance.key' \
+  --recursive \
+  --verbose \
+  --update \
+  --delete \
+  --exclude-from='../.rsync-exclude' \
+  .. \
+  "opc@${IP_ADDRESS}:${WORKSPACE}"
+
+# Switch to GraalVM 21
+SWITCH_JAVA='sdk use java 21-graal'
+
+# The current project/directory
+PROJECT="${PWD##*/}"
+
+# The remote directory from where the commands are executed
+WORKDIR="${WORKSPACE}/${PROJECT}"
+
+# Build the command
+COMMAND=("${SWITCH_JAVA};cd ${WORKDIR};$@")
+
+# Execute the given command(s)
+ssh -i ~/.ssh/ssh-key-oci-instance.key "opc@${IP_ADDRESS}" "${COMMAND[@]}"

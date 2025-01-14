@@ -1,0 +1,316 @@
+{
+  "entries": [
+    {
+      "type": "Heading",
+      "level": "H1",
+      "title": "GraalVM `native-image` + Spring Boot (3.4.1) + FlywayDB (10.20.1)"
+    },
+    {
+      "type": "Markdown",
+      "contents": [
+        "A problem was observed when building a native image using Spring Boot (3.4.1)",
+        "and FlywayDB (10.20.1). This repository was created to replicate this problem.",
+        "",
+        "A simple Spring Boot `native-image` example that provides a REST endpoint, which",
+        "returns a random quote from an [H2](https://www.h2database.com/html/main.html)",
+        "in-memory database by a famous person.",
+        "",
+        "```",
+        "GET '/quote/random'",
+        "```",
+        "",
+        "This will return a JSON object similar to the following:",
+        "",
+        "```json",
+        "{",
+        "  \"author\": \"Robert H. Schuller\",",
+        "  \"quote\": \"Tough times never last but tough people do.\"",
+        "}",
+        "```",
+        "",
+        "This example uses a H2 database and",
+        "[FlywayDB](https://github.com/flyway/flyway) to manage the database as code."
+      ]
+    },
+    {
+      "type": "DisplayFile",
+      "path": "./pom.xml",
+      "from_line": 39,
+      "number_of_lines": 14
+    },
+    {
+      "type": "Markdown",
+      "contents": [
+        "The database initialization script will create the table and populate it with",
+        "quotes from famous people.",
+        "",
+        "Unfortunately, there is an issue with FlywayDB and the native executable fails",
+        "to start with the following error.",
+        "",
+        "```",
+        "Caused by: org.graalvm.nativeimage.MissingReflectionRegistrationError: The program tried to reflectively invoke method public boolean org.flywaydb.core.internal.publishing.PublishingConfigurationExtension.isCheckDriftOnMigrate() without it being registered for runtime reflection. Add public boolean org.flywaydb.core.internal.publishing.PublishingConfigurationExtension.isCheckDriftOnMigrate() to the reflection metadata to solve this problem. See https://www.graalvm.org/latest/reference-manual/native-image/metadata/#reflection for help.",
+        "    at org.graalvm.nativeimage.builder/com.oracle.svm.core.reflect.MissingReflectionRegistrationUtils.forQueriedOnlyExecutable(MissingReflectionRegistrationUtils.java:83)",
+        "```",
+        "",
+        "To address this problem, the following has to be manually added to the",
+        "`./META-INF/native-image/reflect-config.json` file."
+      ]
+    },
+    {
+      "type": "DisplayFile",
+      "path": "./src/main/resources/META-INF/native-image/omit-reflect-config.json"
+    },
+    {
+      "type": "Markdown",
+      "contents": [
+        "There is an",
+        "[internal discussion](https://oracle-one.slack.com/archives/CJAB85R1C/p1736765567955289)",
+        "about this."
+      ]
+    },
+    {
+      "type": "Heading",
+      "level": "H2",
+      "title": "Prerequisites"
+    },
+    {
+      "type": "Markdown",
+      "contents": [
+        "- [Oracle GraalVM for JDK 21](https://www.oracle.com/java/technologies/downloads/#graalvmjava21)"
+      ]
+    },
+    {
+      "type": "Heading",
+      "level": "H2",
+      "title": "Run the example"
+    },
+    {
+      "type": "Markdown",
+      "contents": [
+        "1. **Build the native executable**"
+      ]
+    },
+    {
+      "type": "Command",
+      "commands": [
+        "./mvnw -Pnative clean native:compile"
+      ],
+      "indent": 3
+    },
+    {
+      "type": "Markdown",
+      "contents": [
+        "   This will take a minute or two to complete.",
+        "",
+        "   (_Optional_) Verify that the JAR files and the native executable were created",
+        "   in the `./target` directory:"
+      ]
+    },
+    {
+      "type": "Command",
+      "commands": [
+        "tree --charset=ascii --dirsfirst --sort=name -L 1 --prune './target'"
+      ],
+      "output": {
+        "caption": "The compiled JAR files and native executable:"
+      },
+      "indent": 3
+    },
+    {
+      "type": "Markdown",
+      "contents": [
+        "2. **(_Optional_) Run the Java application**",
+        "",
+        "   Run the Java application using the AoT-generated initialization code. This",
+        "   helps quickly validate that there are no errors in the AoT-generated code and",
+        "   that nothing is missing. You can do this by setting the `spring.aot.enabled`",
+        "   system property to `true`. For more information, please refer to the",
+        "   [Spring Documentation](https://docs.spring.io/spring-boot/reference/packaging/aot.html)."
+      ]
+    },
+    {
+      "type": "Command",
+      "commands": [
+        "java \\",
+        "  -Dspring.aot.enabled=true \\",
+        "  -jar './target/graalvm-spring-boot-flywaydb-1.0.0.jar' > './target/output.txt' 2>&1 &"
+      ],
+      "on_failure_commands": [
+        "kill \"$(jcmd | grep 'graalvm-spring-boot-flywaydb-1.0.0.jar' | cut -d' ' -f1)\""
+      ],
+      "indent": 3
+    },
+    {
+      "type": "Markdown",
+      "contents": [
+        "   Wait for the application to start."
+      ]
+    },
+    {
+      "type": "Command",
+      "commands": [
+        "while [ \"$(curl -s -o /dev/null -w '%{http_code}' 'http://localhost:8080/quote/random')\" -ne '200' ]",
+        "do",
+        "  echo 'Waiting for the application to start'",
+        "  sleep 1;",
+        "done"
+      ],
+      "on_failure_commands": [
+        "kill \"$(jcmd | grep 'graalvm-spring-boot-flywaydb-1.0.0.jar' | cut -d' ' -f1)\""
+      ],
+      "indent": 3
+    },
+    {
+      "type": "Markdown",
+      "contents": [
+        "   Request a random quote."
+      ]
+    },
+    {
+      "type": "Command",
+      "commands": [
+        "curl --silent 'http://localhost:8080/quote/random' | jq"
+      ],
+      "output": {
+        "caption": "This will print a random famous quote similar to the following.",
+        "content_type": "json"
+      },
+      "on_failure_commands": [
+        "kill \"$(jcmd | grep 'graalvm-spring-boot-flywaydb-1.0.0.jar' | cut -d' ' -f1)\""
+      ],
+      "indent": 3
+    },
+    {
+      "type": "Markdown",
+      "contents": [
+        "   Stop the application when ready."
+      ]
+    },
+    {
+      "type": "Command",
+      "commands": [
+        "kill \"$(jcmd | grep 'graalvm-spring-boot-flywaydb-1.0.0.jar' | cut -d' ' -f1)\""
+      ],
+      "indent": 3
+    },
+    {
+      "type": "Markdown",
+      "contents": [
+        "3. **Run the native executable**",
+        "",
+        "   Make sure to stop the Java application before running the native executable,",
+        "   as both will bind to the same port, `8080`."
+      ]
+    },
+    {
+      "type": "Command",
+      "commands": [
+        "'./target/graalvm-spring-boot-flywaydb-1.0.0'"
+      ],
+      "should_fail": true,
+      "output": {
+        "caption": "The native executable will fail to start"
+      },
+      "indent": 3
+    },
+    {
+      "type": "Markdown",
+      "contents": [
+        "4. **Workaround**",
+        "",
+        "   1. Add the required reflection configuration",
+        "",
+        "      For convenience there is a file ready with the required configuration that",
+        "      you simply need to rename."
+      ]
+    },
+    {
+      "type": "Command",
+      "commands": [
+        "mv \\",
+        "  './src/main/resources/META-INF/native-image/omit-reflect-config.json' \\",
+        "  './src/main/resources/META-INF/native-image/reflect-config.json'"
+      ],
+      "indent": 6
+    },
+    {
+      "type": "Markdown",
+      "contents": [
+        "   2. Rebuild the native executable"
+      ]
+    },
+    {
+      "type": "Command",
+      "commands": [
+        "./mvnw -Pnative clean native:compile"
+      ],
+      "indent": 6
+    },
+    {
+      "type": "Markdown",
+      "contents": [
+        "   3. Run the native executable"
+      ]
+    },
+    {
+      "type": "Command",
+      "commands": [
+        "'./target/graalvm-spring-boot-flywaydb-1.0.0'  > './target/output.txt' 2>&1 &"
+      ],
+      "indent": 6
+    },
+    {
+      "type": "Markdown",
+      "contents": [
+        "      This time the native executable starts. Wait for the application to start."
+      ]
+    },
+    {
+      "type": "Command",
+      "commands": [
+        "while [ \"$(curl -s -o /dev/null -w '%{http_code}' 'http://localhost:8080/quote/random')\" -ne '200' ]",
+        "do",
+        "  echo 'Waiting for the application to start'",
+        "  sleep 1;",
+        "done"
+      ],
+      "on_failure_commands": [
+        "pkill -f 'graalvm-spring-boot-flywaydb-1.0.0'"
+      ],
+      "indent": 6
+    },
+    {
+      "type": "Markdown",
+      "contents": [
+        "      Request a random quote."
+      ]
+    },
+    {
+      "type": "Command",
+      "commands": [
+        "curl --silent 'http://localhost:8080/quote/random' | jq"
+      ],
+      "output": {
+        "caption": "This will print a random famous quote similar to the following.",
+        "content_type": "json"
+      },
+      "on_failure_commands": [
+        "pkill -f 'graalvm-spring-boot-flywaydb-1.0.0'"
+      ],
+      "indent": 6
+    },
+    {
+      "type": "Markdown",
+      "contents": [
+        "      Stop the application when ready."
+      ]
+    },
+    {
+      "type": "Command",
+      "commands": [
+        "pkill -f 'graalvm-spring-boot-flywaydb-1.0.0'"
+      ],
+      "indent": 6
+    }
+  ]
+}
